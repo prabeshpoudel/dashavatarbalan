@@ -21,7 +21,7 @@ export const BLOG_ADMIN_PASSWORD = "balan123";
 
 const BLOG_POSTS_STORAGE_KEY = "balanadmin.blogPosts";
 
-export const defaultBlogPosts: BlogPost[] = [
+export const blogPosts: BlogPost[] = [
   {
     id: "gita-4-8",
     title: "Meaning of Bhagavad Gita 4.8",
@@ -124,20 +124,20 @@ export const defaultBlogPosts: BlogPost[] = [
 
 export function getBlogPosts(): BlogPost[] {
   if (typeof window === "undefined") {
-    return defaultBlogPosts;
+    return blogPosts;
   }
 
   const storedPosts = window.localStorage.getItem(BLOG_POSTS_STORAGE_KEY);
 
   if (!storedPosts) {
-    return defaultBlogPosts;
+    return blogPosts;
   }
 
   try {
     const parsedPosts = JSON.parse(storedPosts) as BlogPost[];
-    return Array.isArray(parsedPosts) ? parsedPosts : defaultBlogPosts;
+    return Array.isArray(parsedPosts) ? parsedPosts : blogPosts;
   } catch {
-    return defaultBlogPosts;
+    return blogPosts;
   }
 }
 
