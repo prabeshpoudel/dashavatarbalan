@@ -1,21 +1,74 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getBlogPosts } from "../data/blogPosts";
+import { BlogPost as BlogPostType, fetchBlogPost } from "../data/blogPosts";
 
 const nav = ["Home", "About", "Dashavatar", "Gods", "Events", "Temple Project", "Gallery", "Blog", "Contact"];
 
 export default function BlogPost() {
   const { id } = useParams<{ id: string }>();
-  const [posts] = useState(() => getBlogPosts());
+  const [post, setPost] = useState<BlogPostType | null>(null);
+  const [isLoadingPost, setIsLoadingPost] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showSupport, setShowSupport] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const post = posts.find((currentPost) => currentPost.id === id);
+
+  useEffect(() => {
+    if (!id) {
+      setIsLoadingPost(false);
+      setLoadError("Post not found.");
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadPost = async () => {
+      try {
+        const currentPost = await fetchBlogPost(id);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setPost(currentPost);
+        setLoadError("");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setPost(null);
+        setLoadError(error instanceof Error ? error.message : "Unable to load post.");
+      } finally {
+        if (isMounted) {
+          setIsLoadingPost(false);
+        }
+      }
+    };
+
+    loadPost();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  if (isLoadingPost) {
+    return (
+      <div className="min-h-screen bg-amber-50 text-stone-800 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-stone-900">Loading Post</h1>
+          <p className="mt-4 text-stone-600">Fetching the latest version from the shared database.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!post) {
     return (
       <div className="min-h-screen bg-amber-50 text-stone-800 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-stone-900">Post Not Found</h1>
+          {loadError && <p className="mt-4 text-sm text-stone-600">{loadError}</p>}
           <Link to="/blog" className="mt-4 inline-block text-orange-700 hover:text-orange-800">Back to Blog</Link>
         </div>
       </div>

@@ -1,12 +1,12 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BLOG_ADMIN_ID,
   BLOG_ADMIN_PASSWORD,
   BlogPost,
   createBlogPost,
-  getBlogPosts,
-  saveBlogPosts,
+  DEFAULT_BLOG_IMAGE,
+  fetchBlogPosts,
 } from "../data/blogPosts";
 
 const categories = [
@@ -29,17 +29,8 @@ const emptyPostForm = {
   content: "",
 };
 
-function formatContent(content: string) {
-  return content
-    .split("\n")
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-    .map((paragraph) => `<p>${paragraph}</p>`)
-    .join("");
-}
-
 export default function Blog() {
-  const [posts, setPosts] = useState<BlogPost[]>(() => getBlogPosts());
+  const [posts, setPosts] = useState<BlogPost[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [showSupport, setShowSupport] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -50,6 +41,42 @@ export default function Blog() {
   const [adminError, setAdminError] = useState("");
   const [postForm, setPostForm] = useState(emptyPostForm);
   const [postMessage, setPostMessage] = useState("");
+  const [postsError, setPostsError] = useState("");
+  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [isPublishingPost, setIsPublishingPost] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPosts = async () => {
+      try {
+        const blogPosts = await fetchBlogPosts();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setPosts(blogPosts);
+        setPostsError("");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setPostsError(error instanceof Error ? error.message : "Unable to load blog posts.");
+      } finally {
+        if (isMounted) {
+          setIsLoadingPosts(false);
+        }
+      }
+    };
+
+    loadPosts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredPosts = useMemo(() => {
     if (selectedCategory === "All") {
@@ -71,23 +98,28 @@ export default function Blog() {
     setAdminError("Incorrect admin ID or password.");
   };
 
-  const handleAddPost = (event: FormEvent<HTMLFormElement>) => {
+  const handleAddPost = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const newPost = createBlogPost({
-      ...postForm,
-      content: formatContent(postForm.content),
-      image:
-        postForm.image ||
-        "https://images.unsplash.com/photo-1470115636492-6d2b56f9146d?auto=format&fit=crop&w=800&q=80",
-    });
+    try {
+      setIsPublishingPost(true);
 
-    const updatedPosts = [newPost, ...posts];
-    setPosts(updatedPosts);
-    saveBlogPosts(updatedPosts);
-    setPostForm(emptyPostForm);
-    setSelectedCategory("All");
-    setPostMessage("New post added successfully.");
+      const newPost = await createBlogPost({
+        ...postForm,
+        content: postForm.content,
+        image: postForm.image || DEFAULT_BLOG_IMAGE,
+      });
+
+      setPosts((currentPosts) => [newPost, ...currentPosts]);
+      setPostForm(emptyPostForm);
+      setSelectedCategory("All");
+      setPostMessage("New post added successfully and saved to the shared database.");
+      setPostsError("");
+    } catch (error) {
+      setPostMessage(error instanceof Error ? error.message : "Unable to publish the post.");
+    } finally {
+      setIsPublishingPost(false);
+    }
   };
 
   return (
@@ -359,7 +391,11 @@ export default function Blog() {
                 </label>
 
                 {postMessage && (
-                  <p className="md:col-span-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                  <p className={`md:col-span-2 rounded-2xl px-4 py-3 text-sm font-medium ${
+                    postMessage.includes("successfully")
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-red-50 text-red-700"
+                  }`}>
                     {postMessage}
                   </p>
                 )}
@@ -367,14 +403,21 @@ export default function Blog() {
                 <div className="md:col-span-2">
                   <button
                     type="submit"
+                    disabled={isPublishingPost}
                     className="rounded-full bg-orange-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-800"
                   >
-                    Publish Post
+                    {isPublishingPost ? "Publishing..." : "Publish Post"}
                   </button>
                 </div>
               </form>
             )}
           </div>
+        )}
+
+        {postsError && (
+          <p className="mt-8 rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {postsError}
+          </p>
         )}
 
         <div className="mt-8 flex flex-wrap gap-2">
@@ -394,9 +437,16 @@ export default function Blog() {
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredPosts.map((post) => (
-            <BlogCard key={post.id} post={post} />
-          ))}
+          {isLoadingPosts ? (
+            <p className="text-sm font-medium text-stone-600">Loading blog posts...</p>
+          ) : (
+            filteredPosts.map((post) => (
+              <BlogCard key={post.id} post={post} />
+            ))
+          )}
+          {!isLoadingPosts && !filteredPosts.length && !postsError && (
+            <p className="text-sm font-medium text-stone-600">No blog posts found in this category yet.</p>
+          )}
         </div>
       </section>
 
